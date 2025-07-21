@@ -1,0 +1,152 @@
+``` {r}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls())
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+library(janitor)
+library(ggplot2)
+library(grid)
+library(ggh4x)
+library(ragg)
+library(patchwork)
+library(cowplot)
+
+#point to master ingestion file
+source("ingest_functions.R")
+source("functions.R")
+```
+
+``` {r}
+# set global variables
+limit_by_measure = TRUE
+```
+
+```{r}
+
+ongoing_tibble <- data.frame(
+  index = integer(), 
+  day = as.POSIXct(character()),
+  sap_flux=double(), 
+  entries = integer(), 
+  completeness = logical(), 
+  centroid = double(), 
+  variance = double(), 
+  skewness = double(), 
+  kurtosis = double(), 
+  probe = character(), 
+  plot=character(),
+  placement=character(),
+  vh_type=character(),
+  stringsAsFactors=FALSE
+)
+```
+
+``` {r}
+
+vh_type_vector <- c("Vhr", "Vhl", "Vhx", "Vhz", "Vhr_QA", "Vhl_QA", "Vhx_QA", "Vhz_QA")
+
+for (vh_label in vh_type_vector) {
+  csv_path = paste("../data/Vh_QA/", vh_label, ".csv", sep="")
+  temp_tibble <- read.table(csv_path, sep=",", header=TRUE)
+  temp_tibble <- temp_tibble %>% 
+    mutate(vh_type = vh_label)
+  ongoing_tibble <- rbind(ongoing_tibble, temp_tibble)
+}
+```
+
+``` {r}
+long_all_measures <- ongoing_tibble %>%
+    pivot_longer(!c(day, index, entries, completeness, vh_type, placement, probe, X, plot), names_to = "measure", values_to = "value")
+
+# per Joel's message re: Dropping Kurtosis
+long_all_measures <- long_all_measures %>% 
+  filter(measure != "kurtosis")
+```
+
+``` {r}
+# set the limits for each measure
+limits_by_measure <- data.frame(
+  measure = c("sap_flux", "centroid", "variance", "skewness"),
+  ymin = c(-10, 7, 0, -200),
+  ymax = c(200, 16, 48, 100)
+)
+
+# extract distinct_plots
+distinct_plots <- distinct(long_all_measures, plot)
+
+# iterate over distinct plots to graph
+for (plot_name in distinct_plots$plot) {
+  print(paste("Plotting:", plot_name))
+  
+  # filter by the plot name
+  temp_long_all_measures <- long_all_measures %>% 
+    filter(plot == plot_name)
+  
+  # pivot by the plot
+  temp_long_all_measures$day <- as.Date(temp_long_all_measures$day)
+  
+  # loop through each measure and create a separate plot for each one
+  plots_list <- list()
+  for (m in unique(temp_long_all_measures$measure)) {
+    p <- ggplot(temp_long_all_measures %>% filter(measure == m), aes(x = day, y = value, color = vh_type)) +
+      geom_line() +
+       scale_color_manual(values = c("Vhl" = "#ED8141",
+                                      "Vhl_QA"="#F8766D",
+                                      "Vhr"="#FF62BC", 
+                                      "Vhr_QA" = "#DC71FA", 
+                                      "Vhx" = "#00B81F", 
+                                      "Vhx_QA" = "#5BB300", 
+                                      "Vhz" = "#00BDD0", 
+                                      "Vhz_QA" = "#00A5FF")) + 
+      facet_grid(measure ~ probe, scales = "free_y", space = "free") + 
+      scale_x_date(date_breaks = "1 month") + 
+      theme(axis.text.x = element_text(angle = 20, hjust = 1), 
+            panel.spacing = unit(0.1, "cm")) + 
+      force_panelsizes(cols = c(1, 1), rows = c(1,1)) +
+      labs(title = paste(plot_name,":",m)) + 
+      theme(text = element_text(size = 11), element_line(size =1),
+            plot.title = element_text(size = 16, face = "bold")) +
+    
+    if (limit_by_measure) {
+      scale_y_continuous(limits = c(limits_by_measure$ymin[limits_by_measure$measure == m],
+                                     limits_by_measure$ymax[limits_by_measure$measure == m]), 
+                         expand = c(0, 0), oob = scales::oob_keep, 
+                         name = "Value")
+    }
+    
+    plots_list[[m]] <- p
+  }
+  
+  
+  # combine all the plots using patchwork package
+  final_plot <- wrap_plots(plots_list, ncol = 1)
+  
+  # set name
+  pngfile <- paste("../data/Vh_QA/",plot_name,sep="")
+  if (limit_by_measure) {
+    pngfile <- paste(pngfile,"_limited.png",sep="")
+  } else {
+    pngfile <- paste(pngfile,".png",sep="")
+  }
+  
+  print(paste("Saving:", pngfile))
+  
+  # show plot
+  agg_png(pngfile, width = 40, height = 45, units = "cm", res = 300)
+  final_plot
+  invisible(dev.off())
+  knitr::include_graphics(pngfile)
+
+  # save to file
+  ggsave(pngfile, final_plot, width = 40, height = 45, units = "cm", dpi = 300)
+  
+  
+}
+```

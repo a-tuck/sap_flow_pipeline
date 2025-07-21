@@ -1,0 +1,42 @@
+---
+title: "sap_flow_master"
+output: html_document
+date: '2022-11-01'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls())
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master ingestion file
+source("master_ingest_functions.R")
+```
+
+```{r} 
+
+sap_flow_tibble <- read.table("../data/processed/sap_flow_master.csv", sep = ",", header = TRUE)
+
+```
+
+``` {r}
+
+duplicates_tibble <- sap_flow_tibble %>% 
+  subset(select = -c(X)) %>% 
+  group_by_all() %>% 
+  summarise(total_count = n(), .groups = 'drop')
+
+```
+
+``` {r}
+
+print(sum(duplicates_tibble$total_count))
+
+```

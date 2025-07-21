@@ -1,0 +1,69 @@
+---
+title: "soil_moisture_ingest"
+output: html_document
+date: '2022-11-07'
+last revised date: '2025-01-21'
+written by: Luke Jacobson and Joel Singley; revised by Annie Tucker
+---
+
+FYI: the soil moisture probes are programmed to take five consecutive measurements during each sampling event (every 15 min), the data logger records the min, max, and avg. of these five measurements for each sampling event. We are really only interested in the avg. value, so that is what the ingest script keeps from the raw data. 
+
+Each site has two soil moisture probes, one at 15 cm and one at 30 cm below ground surface.   
+
+
+```{r setup, include=FALSE}
+
+# Set global chunk options for knitr
+# 'echo = TRUE' ensures that all R code chunks in the document will display their code in the output
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls()) # Clear the current R environment
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master ingestion file
+source("src/ingest_functions.R")
+
+# BCZN folder to ingest
+data_folders <- c("July2022","Oct2022","May2023","June2023","Oct2023","May2024")
+```
+
+``` {r}
+# initialize empty tibble
+
+ongoing_tibble <- data.frame(
+  timestamp=as.POSIXct(character()), 
+  record_vwc=integer(), 
+  vwc_avg_15cm=double(), 
+  vwc_avg_30cm=double(), 
+  plot=character(),
+  stringsAsFactors=FALSE
+)
+```
+
+```{r}
+
+soil_moisture_tibble <- iterative_access(data_folders, "_EC5_")
+
+# if your project does not require iteratively accessing data from the folder network, use this script to directly ingest soil moisture data:
+
+# soil_moisture_data_file_path <- "C:\my_path\file.dat"
+# soil_moisture_tibble <- ingest_soil_moisture(soil_moisture_data_file_path)
+
+
+```
+
+``` {r}
+# remove data before 7/1/2022
+filtered_tibble <- soil_moisture_tibble %>% 
+                    filter(timestamp > as.POSIXct("2022-07-01 00:00:00"))
+
+# save filtered_tibble as preliminary soil moisture csv
+write.csv(filtered_tibble, "data/processed/soil_moisture_prelim.csv")
+
+```

@@ -1,0 +1,64 @@
+---
+title: "Snow Depth"
+output: html_document
+date: '2022-11-07'
+last revised date: '2025-01-21'
+
+---
+
+FYI: 
+This snow ingest script was adapted by Annie Tucker from the other ingest scripts
+
+``` {r}
+
+# Set global chunk options for knitr
+# 'echo = TRUE' ensures that all R code chunks in the document will display their code in the output
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls()) # Clear the current R environment
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master ingestion file
+source("src/ingest_functions.R")
+
+# BCZN folder to ingest. Add for new surveys conducted
+data_folders <- c("July2022","Oct2022","May2023","June2023","Oct2023","May2024")
+
+```
+
+```{r}
+ongoing_tibble <- tibble()
+```
+
+```{r}
+snow_tibble <- iterative_access(data_folders, "_SnowDepth_")
+
+
+# if your project does not require iteratively accessing data from the folder network, use this script to directly ingest snow data:
+
+#snow_data_file_path <- "C:\my_path\file.dat"
+#snow_tibble <- ingest_snowdepth(snow_data_file_path)
+
+```
+
+``` {r}
+snow_tibble <- snow_tibble %>% 
+  unique() # removes duplicates
+
+```
+
+``` {r}
+# remove data before 7/1/2022
+filtered_tibble <- snow_tibble %>% 
+                    filter(timestamp > as.POSIXct("2022-07-01 00:00:00"))
+
+# save to csv file
+write.csv(filtered_tibble, "data/processed/snowdepth_prelim.csv")
+
+```

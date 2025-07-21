@@ -1,0 +1,135 @@
+``` {r}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls())
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+library(janitor)
+
+#point to master ingestion file
+source("master_ingest_functions.R")
+source("functions.R")
+```
+
+```{r}
+processed_path = "../data/processed/sap_flow_master.csv"
+harmon_singha_path = "../data/external_data/Harmon.csv"
+chosen_path = processed_path
+
+processed_csv_path = "../data/processed/temporal_moments_master.csv"
+processed_unfiltered_csv_path = "../data/processed/temporal_moments_master_unfiltered.csv"
+harmon_csv_path = "../data/external_data/harmon_temporal_moments_master.csv"
+chosen_csv_path = processed_csv_path
+chosen_unfiltered_csv_path = processed_unfiltered_csv_path
+
+save_pdf_bool = FALSE
+```
+
+``` {r}
+
+# load in and do necessary manipulations
+sap_flow_tibble <- read.table(chosen_path, sep = ",") %>% 
+  row_to_names(row_number = 1) %>% 
+  select(index = 1, everything()) %>%
+  unique()    #ADDED TO REMOVE DUPLICATES
+
+```
+
+``` {r}
+
+ongoing_tibble <- data.frame(
+  index = integer(), 
+  day = as.POSIXct(character()),
+  sap_flux=double(), 
+  entries = integer(), 
+  completeness = logical(), 
+  centroid = double(), 
+  variance = double(), 
+  skewness = double(), 
+  kurtosis = double(), 
+  probe = character(), 
+  plot=character(),
+  placement=character(),
+  stringsAsFactors=FALSE
+)
+
+```
+
+```{r}
+
+distinct_plots <- distinct(sap_flow_tibble, plot) %>% 
+  pull(., plot)
+
+# iterate through
+for (plot_name in distinct_plots) {
+  
+  cat("\n")
+  print(paste("Starting new Plot: ", plot_name))
+  
+  # load plot
+  plot_tibble <- sap_flow_tibble %>% 
+    filter(plot == plot_name)
+  
+  distinct_probes <- distinct(plot_tibble, probe) %>% 
+    pull(., probe)
+  
+  # load probe
+  for (probe_name in distinct_probes) {
+    
+    for (i in 0:1) { 
+      
+      probe_tibble <- plot_tibble %>% 
+        filter(probe == probe_name)
+      
+      placement = "Outer"
+      
+      # select either inner/outer for Vh
+        
+      if (i == 0) {
+        print(paste("Entering Plot:", plot_name, ", Probe:", probe_name, "Outer"))
+        probe_tibble <- probe_tibble %>% 
+          select(index, datetime = timestamp, sap_vel_temp = Vh_Outer)
+      }
+      
+      if (i == 1) {
+        print(paste("Entering Plot:", plot_name, ", Probe:", probe_name, "Inner"))
+        probe_tibble <- probe_tibble %>% 
+          select(index, datetime = timestamp, sap_vel_temp = Vh_Inner)
+        placement = "Inner"
+      }
+      
+      # TEMPORARY: MANIPULATE FOR VH_INNER and VH_OUTER (min offset)
+      vel_min = min(as.numeric(probe_tibble$sap_vel_temp), na.rm = TRUE)
+      probe_tibble <- probe_tibble %>% 
+        mutate(sap_vel = as.numeric(sap_vel_temp) - vel_min) %>% 
+        select(index, datetime, sap_vel)
+      
+      # temporal moments
+      output_tibble <- master_temporal_moments(probe_tibble, plot_name, probe_name, placement, save_pdf = save_pdf_bool)
+      
+      # binding to master file
+      output_tibble <- output_tibble %>% 
+        mutate(day = as.POSIXct(day)) %>% 
+        mutate(probe = probe_name, plot = plot_name, placement = placement)
+
+      ongoing_tibble <- rbind(ongoing_tibble, output_tibble)
+    }
+  }
+}
+```
+
+``` {r}
+
+filtered_tibble <- ongoing_tibble %>% 
+                    filter(day > as.POSIXct("2022-07-01 00:00:00"))
+
+write.csv(filtered_tibble, harmon_csv_path)
+write.csv(ongoing_tibble, harmon_csv_path)
+
+```

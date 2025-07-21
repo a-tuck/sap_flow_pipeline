@@ -1,0 +1,88 @@
+---
+title: "sap_flow_master"
+output: html_document
+date: '2022-11-01'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls())
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master ingestion file
+source("master_ingest_functions.R")
+```
+
+```{r}
+# initialize empty tibble
+
+ongoing_tibble <- data.frame(
+  TIMESTAMP=as.POSIXct(character()), 
+  RECORD=integer(), 
+  BattVolt=double(), 
+  PTemp=double(), 
+  Probe=character(), 
+  TotalSapFlow=double(), 
+  Vh_Outer=double(), 
+  Vh_Inner=double(), 
+  Alpha_Outer=double(), 
+  Alpha_Inner=double(),
+  Beta_Outer=double(),
+  Beta_Inner=double(),
+  Tmax_Outer=double(),
+  Tmax_Inner=double(),
+  Plot=character(),
+  stringsAsFactors=FALSE
+)
+```
+
+OLDEST ENTRIES: 
+
+[1] "Plot:  P304_A // Oldest entry:  2022-05-05 16:15:00"
+[1] "Plot:  P304_B // Oldest entry:  2022-05-06 09:00:00"
+[1] "Plot:  P304_C // Oldest entry:  2000-10-03 09:15:00"
+[1] "Plot:  P304_D // Oldest entry:  2022-06-28 14:00:00"
+[1] "Plot:  P304_E // Oldest entry:  2022-07-02 10:30:00"
+[1] "Plot:  P304_F // Oldest entry:  2022-06-30 14:00:00"
+
+``` {r}
+
+sap_flow_tibble <- iterative_access(c("July2022", "Oct2022"), "_Sap_Flow_")
+```
+
+``` {r}
+ongoing_tibble <- ongoing_tibble[0,] # reset ongoing
+
+uTmax_tibble <- iterative_access(c("July2022", "Oct2022"), "_Diagnostic_")
+```
+
+``` {r}
+sap_flow_tibble <- sap_flow_tibble %>% 
+  unique() # removes duplicates
+
+uTmax_tibble <- uTmax_tibble %>% 
+  unique()
+
+sap_flow_tibble <- sap_flow_tibble %>% # outer join
+  full_join(uTmax_tibble, by = c('timestamp', 'probe', 'plot'))
+```
+
+``` {r}
+
+sap_flow_tibble <- sap_flow_tibble %>% 
+  unique() # removes duplicates
+
+filtered_tibble <- sap_flow_tibble %>% 
+                    filter(timestamp > as.POSIXct("2022-07-01 00:00:00"))
+
+write.csv(filtered_tibble, "../data/processed/sap_flow_master.csv")
+write.csv(sap_flow_tibble, "../data/processed/sap_flow_master_unfiltered.csv")
+
+```

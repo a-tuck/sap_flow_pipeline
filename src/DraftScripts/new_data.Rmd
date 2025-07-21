@@ -1,0 +1,125 @@
+# New data ingestion script
+
+# This is a script to ingest data from a .dat logger file
+
+# ---- Initialize ----
+
+``` {r}
+# clear the environment
+rm(list = ls())
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master function file
+# source("src/functions.R")
+```
+
+# ---- Manually Set Parameters -----
+
+``` {r}
+x_u_inner = 0.6
+x_d_inner = 0.6
+x_u_outer = 0.6
+x_d_outer = 0.6
+t_0 = 3
+t = 60
+k = 0.003
+```
+
+# ---- Ingest .dat File ----
+``` {r}
+# readLines("sample_new.dat", n = 10)
+ingest_vector <- readLines("../sample_new.dat", n=2)
+header_vector <- str_split(ingest_vector[2], pattern = '\",\"')
+
+for (value in header_vector) {
+  column_vector <- value
+  print(value)
+}
+
+ingest_tibble <- read.table("../sample_new.dat", sep = ",", header=FALSE, na.strings = "NAN", skip = 5, col.names = column_vector)
+column_vector
+ingest_tibble
+```
+
+# ---- Clean and Pivot ----
+
+``` {r}
+ingest_tibble <- ingest_tibble %>% 
+  rename(TIMESTAMP = X.TIMESTAMP, BattVolt = Batt_volt) %>%
+  rename_with(~gsub(".", "", .x, fixed = TRUE)) %>% 
+  pivot_longer (
+    cols = -c(TIMESTAMP, RECORD, BattVolt, PTemp), 
+    names_to = c(".value", "Probe"), 
+    names_sep = -1
+  ) %>% 
+  mutate(across(TIMESTAMP, as.POSIXct))
+
+# rename columns by stripping last _ 
+cleaning_column_names <- colnames(ingest_tibble)
+cleaned <- stri_replace_last(cleaning_column_names, regex="_", replacement="")
+colnames(ingest_tibble) <- cleaned
+```
+
+# ---- Mutating and Math ----
+``` {r}
+manipulation_tibble <- ingest_tibble %>% 
+  # OUTER
+  mutate(Vh_HRM_Outer = (2*k*Alpha_Outer)/(x_d_outer + x_u_outer) + 
+           (x_d_outer - x_u_outer) / (2*(t - (t_0 / 2)))) %>% 
+  mutate(Vh_Tmax_Outer = sqrt(((4*k)/t_0) * log(1 - (t_0/Tmax_Outer)) + 
+                                 (x_d_outer ^ 2)/(Tmax_Outer*(Tmax_Outer - t_0)))) %>% 
+  
+  # INNER
+  mutate(Vh_HRM_Inner = (2*k*Alpha_Inner)/(x_d_inner + x_d_inner) + 
+           (x_d_inner - x_u_inner)/(2*(t - (t_0/2)))) %>% 
+  mutate(Vh_Tmax_Inner = sqrt( ((4*k)/t_0) * log(1 - (t_0/Tmax_Inner)) + 
+                                 (x_d_inner ^ 2)/(Tmax_Inner * (Tmax_Inner - t_0)))) %>%
+  # CONVERT all Vh from cm/s to cm/hr
+  mutate(Vh_HRM_Outer = Vh_HRM_Outer * 3600,
+         Vh_Tmax_Outer = Vh_Tmax_Outer * 3600,
+         Vh_HRM_Inner = Vh_HRM_Inner * 3600,
+         Vh_Tmax_Inner = Vh_Tmax_Inner * 3600) %>%
+    # These could be included in the original mutates, but let's leave for clarity
+  
+  # SELECT correction method based on beta value
+  mutate(Vh_Corr_Outer = case_when(Beta_Outer <= 1 ~ Vh_HRM_Outer, 
+                                   Beta_Outer > 1 ~ Vh_Tmax_Outer),
+        Vh_Corr_Outer = case_when(Vh_Corr_Outer == "NaN" ~ "NA"))
+
+manipulation_tibble
+
+```
+
+
+
+# ---- Faceting and Plotting
+``` {r}
+
+# How does ggplot handle NANs? (looking at Jun 10 - Jun 20 disaster)
+
+just_a <- manipulation_tibble %>% 
+  filter(Probe == 'a') %>%
+  ggplot(aes(x = TIMESTAMP)) + 
+  geom_line(aes(y = Vh_Outer), color = "firebrick") +      # uncorrected
+  geom_line(aes(y = Vh_Corr_Outer), color = "steelblue") + # corrected
+  geom_hline(yintercept = 0) +
+  labs(title = "Checking") +
+  ylim(c(-0.5,30)) +
+  theme_few()
+
+just_a
+
+```
+
+``` {r}
+
+# FIXME Something happens in mid-June
+just_a
+
+```

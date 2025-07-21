@@ -1,0 +1,85 @@
+---
+title: "relative_humidity"
+output: html_document
+date: '2022-11-07'
+last revised date: '2025-01-21'
+written by: Luke Jacobson and Joel Singley; revised by Annie Tucker
+---
+
+FYI: The program calculates e_sat and VPD from air temp. (deg C) and RH.
+
+``` {r}
+
+# Set global chunk options for knitr
+# 'echo = TRUE' ensures that all R code chunks in the document will display their code in the output
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls()) # Clear the current R environment
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master ingestion file
+source("src/ingest_functions.R")
+
+# BCZN folder to ingest
+data_folders <- c("July2022","Oct2022","May2023","June2023","Oct2023","May2024")
+
+```
+
+``` {r}
+# initialize empty data frame
+ongoing_tibble <- data.frame(
+  timestamp=as.POSIXct(character()), 
+  record_rh=integer(), 
+  air_temp_2m_C=double(), 
+  rh_percent=double(), 
+  plot=character(),
+  stringsAsFactors=FALSE
+)
+
+```
+
+``` {r}
+# pull in RH data from sites B - F
+rh_tibble <- iterative_access(data_folders, "_RH_", extension_name = c(".xlsx"))
+
+# pull in MET station data which includes RH data for site A
+suppressWarnings(MET_tibble <- iterative_access(data_folders, "_MET_", extension_name = c(".xls")))
+
+
+# if your project does not require iteratively accessing data from the folder network, use this script to directly ingest RH data:
+
+# relative_humidity_data_file_path <- "C:\my_path\file.dat"
+# rh_tibble <- ingest_relative_humidity(relative_humidity_data_file_path)
+# MET_data_file_path <- "C:\my_path\file.dat"
+# MET_tibble <- ingest_MET_datalogger(MET_data_file_path)
+
+
+```
+
+``` {r}
+# pull MET RH data and bind to rh_tibble for site A ("P304_A")
+rh_A <- MET_tibble %>% 
+  select(timestamp, air_temp_2m_C, rh_percent, e_sat_Pa, vpd_kpa) %>% 
+  mutate(record_rh = row_number(timestamp),
+         plot = "P304_A") %>% 
+  select(record_rh, everything())
+
+rh_tibble <- bind_rows(rh_A, rh_tibble)
+# rh_tibble now contains the combined data from MET RH data & original rh_tibble
+
+# remove data before 7/1/2022
+filtered_tibble <- rh_tibble %>% 
+                    filter(timestamp > as.POSIXct("2022-07-01 00:00:00"))
+MET_tibble <- filter(MET_tibble, timestamp > as.POSIXct("2022-07-01 00:00:00"))
+
+# write data
+write.csv(MET_tibble, "data/processed/MET_prelim.csv")
+write.csv(filtered_tibble, "data/processed/rh_prelim.csv")
+
+```

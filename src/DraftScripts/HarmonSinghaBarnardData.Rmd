@@ -1,0 +1,134 @@
+# New data ingestion script
+
+# This is a script to ingest data from a .dat logger file
+
+# ---- Initialize ----
+
+``` {r}
+# clear the environment
+rm(list = ls())
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+library(readxl)
+
+#point to master function file
+source("functions.R")
+```
+
+# ---- Manually Set Parameters -----
+
+``` {r}
+x_u_inner = 0.6
+x_d_inner = 0.6
+x_u_outer = 0.6
+x_d_outer = 0.6
+t_0 = 3
+t = 60
+k = 0.003
+```
+
+# ---- Ingest .dat File ----
+``` {r}
+
+column_vector = c("TIMESTAMP", "Vh_Inner", "Vh_Outer")
+
+ingest_tibble <- read_excel("../data/external_data/Harmon.xlsx") %>% 
+  rename(timestamp = DateTime, Vh_Inner = InSensor, Vh_Outer = OutSensor) %>% 
+  mutate(probe = "a", plot = "P304_Test")
+
+write.csv(ingest_tibble, "../data/external_data/Harmon.csv")
+
+```
+
+``` {r}
+inner_ingest_tibble <- ingest_tibble %>% 
+  rename(datetime = timestamp, sap_vel = Vh_Inner) %>% 
+  select(index, datetime, sap_vel)
+
+outer_ingest_tibble <- ingest_tibble %>% 
+  rename(datetime = timestamp, sap_vel = Vh_Outer) %>% 
+  select(index, datetime, sap_vel)
+
+processed_inner <- master_temporal_moments(inner_ingest_tibble, "TEST", "a", "inner") %>% 
+  mutate(placement = "inner")
+processed_outer <- master_temporal_moments(outer_ingest_tibble, "TEST", "a", "outer") %>% 
+  mutate(placement = "outer")
+
+long_inner <- processed_inner %>%
+    pivot_longer(!c(day, index, entries, completeness, placement), names_to = "measure", values_to = "value")
+long_outer <- processed_outer %>%
+    pivot_longer(!c(day, index, entries, completeness, placement), names_to = "measure", values_to = "value")
+
+long_all_measures %>%
+    ungroup() %>% 
+    ggplot(aes(x = day, group = 1)) + # plotting in groups of 1
+    geom_line(data = long_inner, aes(y = value, color = "blue")) + # basic lineplot
+    geom_line(data = long_outer, aes(y = value, color = "red")) + 
+    theme_bw() + 
+    labs(title = "All Statistical Measures") + 
+    facet_wrap(~ measure, scales = "free") #scale freely
+
+```
+
+# ---- Mutating and Math ----
+``` {r}
+manipulation_tibble <- ingest_tibble %>% 
+  # OUTER
+  mutate(Vh_HRM_Outer = (2*k*Alpha_Outer)/(x_d_outer + x_u_outer) + 
+           (x_d_outer - x_u_outer) / (2*(t - (t_0 / 2)))) %>% 
+  mutate(Vh_Tmax_Outer = sqrt(((4*k)/t_0) * log(1 - (t_0/Tmax_Outer)) + 
+                                 (x_d_outer ^ 2)/(Tmax_Outer*(Tmax_Outer - t_0)))) %>% 
+  
+  # INNER
+  mutate(Vh_HRM_Inner = (2*k*Alpha_Inner)/(x_d_inner + x_d_inner) + 
+           (x_d_inner - x_u_inner)/(2*(t - (t_0/2)))) %>% 
+  mutate(Vh_Tmax_Inner = sqrt( ((4*k)/t_0) * log(1 - (t_0/Tmax_Inner)) + 
+                                 (x_d_inner ^ 2)/(Tmax_Inner * (Tmax_Inner - t_0)))) %>%
+  # CONVERT all Vh from cm/s to cm/hr
+  mutate(Vh_HRM_Outer = Vh_HRM_Outer * 3600,
+         Vh_Tmax_Outer = Vh_Tmax_Outer * 3600,
+         Vh_HRM_Inner = Vh_HRM_Inner * 3600,
+         Vh_Tmax_Inner = Vh_Tmax_Inner * 3600) %>%
+    # These could be included in the original mutates, but let's leave for clarity
+  
+  # SELECT correction method based on beta value
+  mutate(Vh_Corr_Outer = case_when(Beta_Outer <= 1 ~ Vh_HRM_Outer, 
+                                   Beta_Outer > 1 ~ Vh_Tmax_Outer) )#,
+        Vh_Corr_Outer = case_when(Vh_Corr_Outer == "NaN" ~ "NA"))
+
+
+
+```
+
+
+
+# ---- Faceting and Plotting
+``` {r}
+
+# How does ggplot handle NANs? (looking at Jun 10 - Jun 20 disaster)
+
+just_a <- manipulation_tibble %>% 
+  filter(Probe == 'a') %>%
+  ggplot(aes(x = TIMESTAMP)) + 
+  geom_line(aes(y = Vh_Outer), color = "firebrick") +      # uncorrected
+  geom_line(aes(y = Vh_Corr_Outer), color = "steelblue") + # corrected
+  geom_hline(yintercept = 0) +
+  labs(title = "Checking") +
+  ylim(c(-0.5,30)) +
+  theme_few()
+
+just_a
+
+```
+
+``` {r}
+
+# FIXME Something happens in mid-June
+just_a
+
+```

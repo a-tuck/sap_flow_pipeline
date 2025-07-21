@@ -1,0 +1,79 @@
+---
+title: "sap_flow_ingest"
+output: html_document
+date: '2022-11-01'
+last revised date: '2025-01-21'
+written by: Luke Jacobson and Joel Singley; revised by Annie Tucker
+---
+
+FYI: The iterative_access function is written specifically for the Sierra BCZN project and the organization of our raw data. It indexes into our different field work trips, the station datasets, the station, and the data download event. If applying this code to a different project, 1) skip this function and pass a file path to the ingest_sap_flow directly (see commented out code at Line 46, 47) or 2) re-write the iterative_access for your project.
+
+```{r setup, include=FALSE}
+
+# Set global chunk options for knitr
+# 'echo = TRUE' ensures that all R code chunks in the document will display their code in the output
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls()) # Clear the current R environment
+
+#load required libraries
+library(tidyverse)
+library(ggthemes)
+library(pracma)
+library(dplyr)
+library(stringi)
+
+#point to master ingestion file
+source("src/ingest_functions.R")
+
+# BCZN folder to ingest (only needed if iteratively accessing data folders)
+data_folders <- c("July2022","Oct2022","May2023","June2023","Oct2023","May2024")
+```
+
+```{r}
+# initialize empty tibble
+ongoing_tibble <- tibble()
+
+```
+
+``` {r}
+# ingest sap flow data
+sap_flow_tibble <- iterative_access(data_folders, "_Sap_Flow_")
+
+
+# if your project does not require iteratively accessing data from the folder network, use this script to directly ingest sap flow data (one file at a time):
+
+# sap_flow_data_file_path <- "C:\my_path\file.dat"
+# sap_flow_tibble <- ingest_sap_flow(sap_flow_data_file_path)
+
+```
+
+``` {r}
+sap_flow_tibble <- sap_flow_tibble %>% 
+  unique() # removes duplicates
+
+```
+
+The below code is needed to for the Tmax method of calculating sap velocity from heat velocity. If not using Tmax, the heat ratio method is used and is preferred for this project
+``` {r}
+#ongoing_tibble <- ongoing_tibble[0,] # reset ongoing
+
+# ingest sap flow Tmax data from Diagnostic files
+#uTmax_tibble <- iterative_access(data_folders, "_Diagnostic_")
+
+#uTmax_tibble <- uTmax_tibble %>% 
+#  unique() # remove duplicates 
+
+#sap_flow_tibble <- sap_flow_tibble %>% # join on primary key
+#  full_join(uTmax_tibble, by = c('timestamp', 'probe', 'plot'))
+```
+
+``` {r}
+# remove data before 7/1/2022
+filtered_tibble <- sap_flow_tibble %>% 
+                    filter(timestamp > as.POSIXct("2022-07-01 00:00:00"))
+
+# rename "sap_flow_prelim.csv"
+write.csv(filtered_tibble, "data/processed/sap_flow_prelim.csv")
+
+```

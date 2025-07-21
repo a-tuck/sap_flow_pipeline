@@ -1,0 +1,116 @@
+---
+title: "data_vis"
+author: "Luke Jacobsen"
+date: "2023-06-14"
+output:
+  html_document: default
+---
+
+This script produces basic plots of the corrected data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r include=FALSE}
+library(tidyverse) #provides a powerful syntax and tools to work with data
+library(lubridate) #addition to tidyverse for working with date-times
+library(plotly) #makes interactive plots
+#library(patchwork)
+
+source("src/data_vis_functions.R")
+```
+
+```{r read in data, include=FALSE}
+#Vh_tibble <- read_csv("data/Vh_corrected_run9_k0-0025.csv")
+soil_vwc_tibble <- read_csv("data/processed/soil_moisture_master.csv")
+RH_tibble <- read_csv("data/processed/rh_master.csv")
+MET_tibble <- read_csv("data/processed/MET_master.csv")
+Vh_tibble <- read_csv("data/processed/Vh_corrected_run13_k0-0025.csv")
+Vh_min_events <- read_csv("data/processed/Vh_min_events.csv")
+zero_flow <- read_csv("data/processed/zero_flow_events.csv")
+```
+
+```{r MET, eval=FALSE, include=FALSE}
+# pivot MET
+# fig_airTemp <- timeseries_basic(MET_tibble, air_temp_2m_C) + ggtitle("air temp")
+# fig_airPres <- timeseries_basic(MET_tibble, air_pressure_kpa) + ggtitle("air pressure")
+# fig_rh <- timeseries_basic(MET_tibble, rh_percent) + ggtitle("RH")
+# fig_vpd <- timeseries_basic(MET_tibble, vpd_kpa) + ggtitle("VPD")
+# 
+# ggplotly(fig_airTemp)
+# ggplotly(fig_airPres)
+# ggplotly(fig_rh)
+# ggplotly(fig_vpd)
+
+#fig_MET <- fig_airTemp/fig_airPres/fig_rh/fig_vpd
+
+# fig_MET <- ggplotly(subplot(fig_airTemp, fig_airPres, fig_rh, fig_vpd, nrows = 4))
+# annotations <-  list(
+#   subplot_title("air temp"),
+#   subplot_title("Air Pressure"),
+#   subplot_title("RH"),
+#   subplot_title("VPD"))
+# 
+# fig_MET <- fig_MET %>% layout(annotations = annotations)
+#fig_MET
+```
+
+```{r MET_sites, echo=FALSE}
+temp_plot <- ggplot(RH_tibble) +
+  geom_line(aes(x = timestamp, y = air_temp_2m_C)) +
+  facet_wrap(~plot, ncol = 1)
+ggplotly(temp_plot)
+
+temp_plot <- ggplot(RH_tibble) +
+  geom_line(aes(x = timestamp, y = air_temp_2m_C, color = plot))
+ggplotly(temp_plot)
+
+VPD_plot <- ggplot(RH_tibble) +
+  geom_line(aes(x = timestamp, y = vpd_kpa)) +
+  facet_wrap(~plot, ncol = 1)
+ggplotly(VPD_plot)
+
+VPD_plot <- ggplot(RH_tibble) +
+  geom_line(aes(x = timestamp, y = vpd_kpa, color = plot))
+ggplotly(VPD_plot)
+```
+
+```{r VWC, echo=FALSE}
+VWC_plot <- ggplot(soil_vwc_tibble) +
+  geom_line(aes(x = timestamp, y = vwc, color = depth_cm)) + 
+  facet_wrap(~plot, ncol = 1)
+ggplotly(VWC_plot)
+```
+
+```{r zero-flow, echo=FALSE}
+zero_flow_plot("P304_A", RH_tibble,soil_vwc_tibble)
+zero_flow_plot("P304_B", RH_tibble,soil_vwc_tibble)
+zero_flow_plot("P304_C", RH_tibble,soil_vwc_tibble)
+zero_flow_plot("P304_D", RH_tibble,soil_vwc_tibble)
+zero_flow_plot("P304_E", RH_tibble,soil_vwc_tibble)
+zero_flow_plot("P304_F", RH_tibble,soil_vwc_tibble)
+
+# ggplotly(zero_flow_plot("P304_A", RH_tibble,soil_vwc_tibble), dynamicTicks = TRUE)
+# ggplotly(zero_flow_plot("P304_B", RH_tibble,soil_vwc_tibble), dynamicTicks = TRUE)
+# ggplotly(zero_flow_plot("P304_C", RH_tibble,soil_vwc_tibble), dynamicTicks = TRUE)
+# ggplotly(zero_flow_plot("P304_D", RH_tibble,soil_vwc_tibble), dynamicTicks = TRUE)
+# ggplotly(zero_flow_plot("P304_E", RH_tibble,soil_vwc_tibble), dynamicTicks = TRUE)
+# ggplotly(zero_flow_plot("P304_F", RH_tibble,soil_vwc_tibble), dynamicTicks = TRUE)
+```
+
+```{r sap flow, echo=FALSE}
+p <- ggplot(Vh_tibble) +
+  geom_boxplot(aes(x = plot, y = Vhr_HRM_inner)) +
+  labs(title = "Distribution of inner heat velocities calculated using the HRM method",
+       y = "Heat Veloctiy (cm/hr)") +
+  theme_bw()
+ggplotly(p)
+
+ggplotly(timeseries_Vh_plot("P304_A"), width = 1250, height = 800, dynamicTicks = TRUE)
+ggplotly(timeseries_Vh_plot("P304_B"), width = 1250, height = 800,dynamicTicks = TRUE)
+ggplotly(timeseries_Vh_plot("P304_C"), width = 1250, height = 800,dynamicTicks = TRUE)
+ggplotly(timeseries_Vh_plot("P304_D"), width = 1250, height = 800,dynamicTicks = TRUE)
+ggplotly(timeseries_Vh_plot("P304_E"), width = 1250, height = 800,dynamicTicks = TRUE)
+ggplotly(timeseries_Vh_plot("P304_F"), width = 1250, height = 800,dynamicTicks = TRUE)
+```

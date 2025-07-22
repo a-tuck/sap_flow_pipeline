@@ -33,3 +33,7 @@ Sequence of Scripts & Notes:
 	**If running this code for a different project, some adjustments may be needed if tree core data is not accessible (see script and comments). Also, verify that the parameters set at the top of the script apply. Also, "plot" and "probe" are specific to Sierra BCZN, and the code indexes with them many times, so that may need to be adjusted.
 
 4 - There is another script (data_vis) to plot the master files.
+
+
+Python_SF_Scripts
+additional scripts for updated zeroing using python script based on Zeppel et al. and for converting heat velocity to sap velocity
